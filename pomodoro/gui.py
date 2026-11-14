@@ -89,7 +89,7 @@ class PomodoroGUI:
         self.storage = _get_session_storage()()
 
         # --- State Vars ---
-        self.state_var = StringVar(value=self.engine.state)
+        self.state_var = StringVar(value=str(self.engine.state))
         self.timer_var = StringVar(value=format_time(self.engine.remaining_seconds))
         self.focus_minutes_var = IntVar(value=int(round(self.engine.focus_seconds / 60)))
         self.short_break_var = StringVar()
@@ -271,7 +271,7 @@ class PomodoroGUI:
         self.long_break_label.config(text=f"Long Break: {format_time(long_secs)}")
 
     def _update_state_badge(self):
-        state = self.engine.state
+        state = str(self.engine.state)
         color = STATE_COLORS.get(state, WHITE)
         label = STATE_LABELS.get(state, state)
         self.state_badge.config(text=label, background=color, foreground=SLATE_BG if color != WHITE else CARD_BG)
@@ -288,7 +288,7 @@ class PomodoroGUI:
             self.timer_label.config(foreground=GRAY)
 
     def _update_timer_display(self):
-        state = self.engine.state
+        state = str(self.engine.state)
         if state == "OVERTIME":
             self.timer_var.set(format_time(self.engine.overtime_seconds, show_plus=True))
         else:
@@ -332,7 +332,7 @@ class PomodoroGUI:
         self._update_timer_display()
 
     def _on_complete(self):
-        prev_state = self.engine.state
+        prev_state = str(self.engine.state)
         rem = self.engine.complete_focus()
         self._update_state_badge()
         self._update_timer_display()
@@ -353,20 +353,22 @@ class PomodoroGUI:
             self.root.after(1000, self._schedule_tick)
 
     def _tick(self):
-        state = self.engine.state
+        state = str(self.engine.state)
         if state in ("FOCUS", "OVERTIME", "SHORT_BREAK", "LONG_BREAK"):
             try:
                 prev_rem = self.engine.remaining_seconds
                 prev_state = state
                 new_state = self.engine.tick(1)
+                # The engine.tick() return value may be an enum; always convert to str
+                new_state_str = str(new_state)
                 self._update_timer_display()
-                if prev_state in ("FOCUS", "OVERTIME") and new_state in ("SHORT_BREAK", "LONG_BREAK"):
+                if prev_state in ("FOCUS", "OVERTIME") and new_state_str in ("SHORT_BREAK", "LONG_BREAK"):
                     # Completed a session, record stats
                     focus_mins = self.engine.focus_seconds / 60
                     overtime_mins = self.engine.overtime_seconds / 60
                     self.storage.record_session(focus_mins, overtime_mins)
                     self._update_footer()
-                elif prev_state in ("SHORT_BREAK", "LONG_BREAK") and new_state == "IDLE":
+                elif prev_state in ("SHORT_BREAK", "LONG_BREAK") and new_state_str == "IDLE":
                     self._update_footer()
             except Exception:
                 pass
