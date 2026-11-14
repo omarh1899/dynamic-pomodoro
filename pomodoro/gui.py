@@ -151,17 +151,17 @@ if CUSTOMTKINTER_AVAILABLE:
             # Title
             title = ctk.CTkLabel(header, text="⚡ DYNAMIC POMODORO", font=("Segoe UI", 14, "bold"), text_color=WHITE)
             title.grid(row=0, column=0, sticky="w", padx=(24, 10), pady=0)
-            # State badge
-            self.state_badge = ctk.CTkLabel(header, text="", font=("Segoe UI", 11, "bold"),
-                                            fg_color=GRAY, text_color=SLATE_BG,
-                                            corner_radius=12, width=110, height=28)
-            self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), pady=0)
             # Always on Top
             self.always_on_top_chk = ctk.CTkCheckBox(
                 header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top,
                 font=("Segoe UI", 10), text_color=WHITE, fg_color=GRAY,
                 hover_color=NEON_CYAN, border_color=SLATE_BG, border_width=1)
             self.always_on_top_chk.grid(row=0, column=2, sticky="e", padx=(10, 24), pady=0)
+            # State badge
+            self.state_badge = ctk.CTkLabel(header, text="", font=("Segoe UI", 11, "bold"),
+                                            fg_color=GRAY, text_color=SLATE_BG,
+                                            corner_radius=12, width=110, height=28)
+            self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), pady=0)
 
         def _build_timer_card(self):
             card = ctk.CTkFrame(self.root, fg_color=CARD_BG, corner_radius=18, height=196)
@@ -433,6 +433,7 @@ if CUSTOMTKINTER_AVAILABLE:
             root = ctk.CTk()
         except Exception as e:
             if self_test:
+                # fallback to logic-only self test
                 engine = PomodoroEngine()
                 breaks = engine.set_focus_duration(50)
                 assert breaks["short_break_seconds"] == 600
@@ -543,10 +544,10 @@ else:
             header.grid_columnconfigure(2, weight=0)
             title = ttk.Label(header, text="⚡ DYNAMIC POMODORO", style="Header.TLabel")
             title.grid(row=0, column=0, sticky="w", padx=(24, 10))
-            self.state_badge = ttk.Label(header, text="", style="StateBadge.TLabel")
-            self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), ipadx=8, ipady=2)
             self.always_on_top_chk = ttk.Checkbutton(header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top, style="TCheckbutton")
             self.always_on_top_chk.grid(row=0, column=2, sticky="e", padx=(10, 24))
+            self.state_badge = ttk.Label(header, text="", style="StateBadge.TLabel")
+            self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), ipadx=8, ipady=2)
 
         def _build_timer_card(self):
             card = ttk.Frame(self.root, style="Card.TFrame", height=196)
