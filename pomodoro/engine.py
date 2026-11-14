@@ -112,7 +112,7 @@ class PomodoroEngine:
         self.overtime_seconds += additional
         # If in FOCUS and already finished, or in OVERTIME, set state to OVERTIME
         if (
-            self.state == TimerState.FOCUS and self.remaining_seconds == 0
+            (self.state == TimerState.FOCUS and self.remaining_seconds == 0)
         ) or (self.state == TimerState.OVERTIME):
             self.state = TimerState.OVERTIME
         return self.overtime_seconds
@@ -147,7 +147,8 @@ class PomodoroEngine:
                 excess = seconds - self.remaining_seconds
                 if self.remaining_seconds > 0:
                     self.remaining_seconds = 0
-                # Enter overtime
+                else:
+                    excess = seconds
                 self.state = TimerState.OVERTIME
                 self.overtime_seconds += excess
         elif self.state == TimerState.OVERTIME:

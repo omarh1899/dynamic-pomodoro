@@ -1,3 +1,3 @@
-from pomodoro.engine import PomodoroEngine, TimerState, recalculate_breaks
+from .engine import PomodoroEngine, TimerState, recalculate_breaks
 
 __all__ = ["PomodoroEngine", "TimerState", "recalculate_breaks"]
