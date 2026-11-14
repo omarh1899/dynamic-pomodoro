@@ -140,15 +140,13 @@ class PomodoroEngine:
             # Do nothing while paused
             return self.state.value
         if self.state == TimerState.FOCUS:
-            # Subtract from remaining_seconds. If goes negative, remainder is overtime
             if self.remaining_seconds > seconds:
                 self.remaining_seconds -= seconds
             else:
+                # Any overdraft goes into overtime
                 excess = seconds - self.remaining_seconds
                 if self.remaining_seconds > 0:
                     self.remaining_seconds = 0
-                else:
-                    excess = seconds
                 self.state = TimerState.OVERTIME
                 self.overtime_seconds += excess
         elif self.state == TimerState.OVERTIME:
@@ -159,7 +157,7 @@ class PomodoroEngine:
             else:
                 self.remaining_seconds = self.focus_seconds
                 self.state = TimerState.IDLE
-        # If just hit zero in focus, switch to overtime
+        # If just hit zero in focus (tick(remaining_seconds) exactly), switch to overtime
         if self.state == TimerState.FOCUS and self.remaining_seconds == 0:
             self.state = TimerState.OVERTIME
         return self.state.value
