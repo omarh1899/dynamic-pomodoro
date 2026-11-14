@@ -119,17 +119,22 @@ if CUSTOMTKINTER_AVAILABLE:
             self.total_overtime_var = StringVar(value="0")
             self.streak_var = IntVar(value=0)
 
-            # --- Layout ---
+            # --- Layout using responsive grid ---
+            self.root.grid_rowconfigure(0, weight=0)  # header
+            self.root.grid_rowconfigure(1, weight=1)  # timer card
+            self.root.grid_rowconfigure(2, weight=0)  # duration controls
+            self.root.grid_rowconfigure(3, weight=0)  # controls
+            self.root.grid_rowconfigure(4, weight=0)  # footer
+            self.root.grid_columnconfigure(0, weight=1)
+
             self._build_header()
             self._build_timer_card()
             self._build_duration_controls()
             self._build_controls()
             self._build_footer()
 
-            # --- Bindings ---
             self._bind_events()
 
-            # --- Initial update ---
             self._update_break_labels()
             self._update_footer()
             self._update_state_badge()
@@ -137,40 +142,51 @@ if CUSTOMTKINTER_AVAILABLE:
             self._schedule_tick()
 
         def _build_header(self):
-            header = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0)
+            header = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0, height=29)
             header.grid(row=0, column=0, sticky="ew", padx=0, pady=(18, 8))
             header.grid_columnconfigure(0, weight=1)
+            header.grid_columnconfigure(1, weight=0)
+            header.grid_columnconfigure(2, weight=0)
             # Title
             title = ctk.CTkLabel(header, text="⚡ DYNAMIC POMODORO", font=("Segoe UI", 14, "bold"), text_color=WHITE)
             title.grid(row=0, column=0, sticky="w", padx=(24, 10), pady=0)
-            # Always on Top
-            self.always_on_top_chk = ctk.CTkCheckBox(header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top, font=("Segoe UI", 10), text_color=WHITE, fg_color=GRAY, hover_color=NEON_CYAN, border_color=SLATE_BG, border_width=1)
-            self.always_on_top_chk.grid(row=0, column=2, sticky="e", padx=(10, 24), pady=0)
             # State badge
-            self.state_badge = ctk.CTkLabel(header, text="", font=("Segoe UI", 11, "bold"), fg_color=GRAY, text_color=SLATE_BG, corner_radius=12, width=110, height=28)
+            self.state_badge = ctk.CTkLabel(header, text="", font=("Segoe UI", 11, "bold"),
+                                            fg_color=GRAY, text_color=SLATE_BG,
+                                            corner_radius=12, width=110, height=28)
             self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), pady=0)
-            header.grid_columnconfigure(1, weight=0)
-            header.grid_columnconfigure(2, weight=0)
+            # Always on Top
+            self.always_on_top_chk = ctk.CTkCheckBox(
+                header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top,
+                font=("Segoe UI", 10), text_color=WHITE, fg_color=GRAY,
+                hover_color=NEON_CYAN, border_color=SLATE_BG, border_width=1)
+            self.always_on_top_chk.grid(row=0, column=2, sticky="e", padx=(10, 24), pady=0)
 
         def _build_timer_card(self):
-            card = ctk.CTkFrame(self.root, fg_color=CARD_BG, corner_radius=18)
+            card = ctk.CTkFrame(self.root, fg_color=CARD_BG, corner_radius=18, height=196)
             card.grid(row=1, column=0, sticky="ew", padx=32, pady=(0, 8))
             card.grid_columnconfigure(0, weight=1)
+            card.grid_rowconfigure(0, weight=1)
             # Timer with circular progress
             self.timer_canvas = ctk.CTkCanvas(card, width=180, height=180, bg=CARD_BG, highlightthickness=0)
-            self.timer_canvas.grid(row=0, column=0, pady=(16, 0))
-            self.timer_label = ctk.CTkLabel(card, textvariable=self.timer_var, font=("Consolas", 48, "bold"), text_color=NEON_CYAN, fg_color="transparent")
+            self.timer_canvas.grid(row=0, column=0, pady=(16, 0), sticky="n")
+            self.timer_label = ctk.CTkLabel(
+                master=card,
+                textvariable=self.timer_var,
+                font=("Consolas", 48, "bold"),
+                text_color=NEON_CYAN,
+                fg_color="transparent"
+            )
+            # Place at absolute center of canvas in card
             self.timer_label.place(in_=self.timer_canvas, relx=0.5, rely=0.5, anchor="center")
             self._timer_card = card
 
         def _draw_progress(self):
-            # Draw circular progress bar for focus/overtime/break
             self.timer_canvas.delete("all")
             total = self.engine.focus_seconds
             if str(self.engine.state) in ("SHORT_BREAK", "LONG_BREAK"):
                 total = self.engine.long_break_seconds if str(self.engine.state) == "LONG_BREAK" else self.engine.short_break_seconds
             if str(self.engine.state) == "OVERTIME":
-                # Overtime: fill full circle, color amber
                 color = AMBER
                 percent = 1.0
             elif str(self.engine.state) == "PAUSED":
@@ -184,29 +200,32 @@ if CUSTOMTKINTER_AVAILABLE:
             # Draw arc
             if percent > 0:
                 self.timer_canvas.create_arc(10, 10, 170, 170, start=90, extent=-360*percent, style="arc", outline=color, width=14, capstyle="round")
-            # Optionally, draw overtime as a full amber ring
             if str(self.engine.state) == "OVERTIME":
                 self.timer_canvas.create_oval(10, 10, 170, 170, outline=AMBER, width=14)
 
         def _build_duration_controls(self):
-            frame = ctk.CTkFrame(self.root, fg_color=CARD_BG, corner_radius=12)
+            frame = ctk.CTkFrame(self.root, fg_color=CARD_BG, corner_radius=12, height=110)
             frame.grid(row=2, column=0, sticky="ew", padx=32, pady=(0, 8))
+            frame.grid_rowconfigure(0, weight=0)
+            frame.grid_rowconfigure(1, weight=1)
+            frame.grid_rowconfigure(2, weight=0)
+            frame.grid_columnconfigure(0, weight=0)
             frame.grid_columnconfigure(1, weight=1)
+            frame.grid_columnconfigure(2, weight=0)
             # Label
             label = ctk.CTkLabel(frame, text="Focus Duration", font=("Segoe UI", 12, "bold"), text_color=WHITE)
             label.grid(row=0, column=0, sticky="w", padx=(12, 4), pady=(10, 2), columnspan=3)
-            # Slider
+            # Slider/spin controls
+            self.minus_btn = ctk.CTkButton(frame, text="-", width=37, height=38, font=("Segoe UI", 16, "bold"), fg_color=DARK_GRAY, text_color=WHITE, hover_color=GRAY, corner_radius=6, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()-1))
+            self.minus_btn.grid(row=1, column=0, padx=(12, 4), pady=(4, 4), sticky="ew")
             self.slider = ctk.CTkSlider(
                 frame, from_=1, to=120, number_of_steps=119,
                 variable=self.focus_minutes_var, command=self._on_focus_slider,
                 fg_color=SLATE_BG, progress_color=NEON_CYAN, button_color=NEON_CYAN, button_hover_color=EMERALD, width=460, height=14
             )
-            self.slider.grid(row=1, column=1, sticky="ew", padx=(8, 8), pady=(4, 4), columnspan=1)
-            # Spinbox-like +/- buttons
-            self.minus_btn = ctk.CTkButton(frame, text="-", width=36, height=32, font=("Segoe UI", 16, "bold"), fg_color=DARK_GRAY, text_color=WHITE, hover_color=GRAY, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()-1))
-            self.minus_btn.grid(row=1, column=0, padx=(12, 4), pady=(4, 4))
-            self.plus_btn = ctk.CTkButton(frame, text="+", width=36, height=32, font=("Segoe UI", 16, "bold"), fg_color=DARK_GRAY, text_color=WHITE, hover_color=GRAY, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()+1))
-            self.plus_btn.grid(row=1, column=2, padx=(4, 12), pady=(4, 4))
+            self.slider.grid(row=1, column=1, sticky="ew", padx=(4, 4), pady=(4, 4))
+            self.plus_btn = ctk.CTkButton(frame, text="+", width=37, height=38, font=("Segoe UI", 16, "bold"), fg_color=DARK_GRAY, text_color=WHITE, hover_color=GRAY, corner_radius=6, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()+1))
+            self.plus_btn.grid(row=1, column=2, padx=(4, 12), pady=(4, 4), sticky="ew")
             # Short/long break preview
             self.short_break_label = ctk.CTkLabel(frame, text="", font=("Segoe UI", 10), text_color=EMERALD)
             self.short_break_label.grid(row=2, column=0, sticky="w", padx=(12, 4), pady=(0, 10), columnspan=2)
@@ -214,25 +233,27 @@ if CUSTOMTKINTER_AVAILABLE:
             self.long_break_label.grid(row=2, column=2, sticky="e", padx=(4, 12), pady=(0, 10))
 
         def _build_controls(self):
-            frame = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0)
+            frame = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0, height=136)
             frame.grid(row=3, column=0, sticky="ew", padx=32, pady=(0, 8))
             for i in range(6):
                 frame.grid_columnconfigure(i, weight=1, uniform="ctrl")
+            frame.grid_rowconfigure(0, weight=1)
+            frame.grid_rowconfigure(1, weight=1)
             # Row 0: Start, Pause, Reset
-            self.start_btn = ctk.CTkButton(frame, text="▶ Start", command=self._on_start, fg_color=NEON_CYAN, text_color=SLATE_BG, hover_color=EMERALD, font=("Segoe UI", 13, "bold"), corner_radius=8, height=38)
+            self.start_btn = ctk.CTkButton(frame, text="▶ Start", command=self._on_start, fg_color=NEON_CYAN, text_color=SLATE_BG, hover_color=EMERALD, font=("Segoe UI", 13, "bold"), corner_radius=8, height=53, width=180)
             self.start_btn.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(8, 6), ipadx=14, ipady=4)
-            self.pause_btn = ctk.CTkButton(frame, text="⏸ Pause", command=self._on_pause, fg_color=CARD_BG, text_color=WHITE, hover_color=NEON_CYAN, font=("Segoe UI", 13, "bold"), corner_radius=8, height=38)
+            self.pause_btn = ctk.CTkButton(frame, text="⏸ Pause", command=self._on_pause, fg_color=CARD_BG, text_color=WHITE, hover_color=NEON_CYAN, font=("Segoe UI", 13, "bold"), corner_radius=8, height=53, width=180)
             self.pause_btn.grid(row=0, column=2, columnspan=2, sticky="ew", padx=8, pady=(8, 6), ipadx=14, ipady=4)
-            self.reset_btn = ctk.CTkButton(frame, text="↺ Reset", command=self._on_reset, fg_color=CARD_BG, text_color=WHITE, hover_color=NEON_CYAN, font=("Segoe UI", 13, "bold"), corner_radius=8, height=38)
+            self.reset_btn = ctk.CTkButton(frame, text="↺ Reset", command=self._on_reset, fg_color=CARD_BG, text_color=WHITE, hover_color=NEON_CYAN, font=("Segoe UI", 13, "bold"), corner_radius=8, height=53, width=180)
             self.reset_btn.grid(row=0, column=4, columnspan=2, sticky="ew", padx=8, pady=(8, 6), ipadx=14, ipady=4)
             # Row 1: Overtime, Complete
-            self.overtime_btn = ctk.CTkButton(frame, text="+5m Flow Overtime", command=self._on_overtime, fg_color=AMBER, text_color=SLATE_BG, hover_color="#fbbf24", font=("Segoe UI", 13, "bold"), corner_radius=8, height=38)
+            self.overtime_btn = ctk.CTkButton(frame, text="+5m Flow Overtime", command=self._on_overtime, fg_color=AMBER, text_color=SLATE_BG, hover_color="#fbbf24", font=("Segoe UI", 13, "bold"), corner_radius=8, height=53, width=250)
             self.overtime_btn.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=(6, 10), ipadx=16, ipady=4)
-            self.complete_btn = ctk.CTkButton(frame, text="⏭ Complete Focus -> Break", command=self._on_complete, fg_color=EMERALD, text_color=SLATE_BG, hover_color="#34d399", font=("Segoe UI", 13, "bold"), corner_radius=8, height=38)
+            self.complete_btn = ctk.CTkButton(frame, text="⏭ Complete Focus -> Break", command=self._on_complete, fg_color=EMERALD, text_color=SLATE_BG, hover_color="#34d399", font=("Segoe UI", 13, "bold"), corner_radius=8, height=53, width=250)
             self.complete_btn.grid(row=1, column=3, columnspan=3, sticky="ew", padx=8, pady=(6, 10), ipadx=16, ipady=4)
 
         def _build_footer(self):
-            frame = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0)
+            frame = ctk.CTkFrame(self.root, fg_color=SLATE_BG, corner_radius=0, height=21)
             frame.grid(row=4, column=0, sticky="ew", padx=16, pady=(12, 8))
             frame.grid_columnconfigure(0, weight=1)
             self.footer_label = ctk.CTkLabel(
@@ -388,7 +409,6 @@ if CUSTOMTKINTER_AVAILABLE:
 
         # --- Self-test logic ---
         def _self_test(self):
-            # Test dynamic break recalculation for 50m
             breaks = self.engine.set_focus_duration(50)
             assert breaks["short_break_seconds"] == 600, f"short_break_seconds={breaks['short_break_seconds']}"
             assert breaks["long_break_seconds"] == 1800, f"long_break_seconds={breaks['long_break_seconds']}"
@@ -429,11 +449,9 @@ else:
             self.root.resizable(True, True)
             self.self_test = self_test
 
-            # --- Engine & Storage ---
             self.engine = PomodoroEngine()
             self.storage = _get_session_storage()()
 
-            # --- State Vars ---
             self.state_var = StringVar(value=str(self.engine.state))
             self.timer_var = StringVar(value=format_time(self.engine.remaining_seconds))
             self.focus_minutes_var = IntVar(value=int(round(self.engine.focus_seconds / 60)))
@@ -441,26 +459,28 @@ else:
             self.long_break_var = StringVar()
             self.always_on_top_var = BooleanVar(value=False)
 
-            # Footer stats
             self.completed_sessions_var = IntVar(value=0)
             self.total_focus_var = StringVar(value="0")
             self.total_overtime_var = StringVar(value="0")
             self.streak_var = IntVar(value=0)
 
-            # --- Style ---
             self._setup_styles()
 
-            # --- Layout ---
+            # Responsive grid window
+            self.root.rowconfigure(0, weight=0)
+            self.root.rowconfigure(1, weight=1)
+            self.root.rowconfigure(2, weight=0)
+            self.root.rowconfigure(3, weight=0)
+            self.root.rowconfigure(4, weight=0)
+            self.root.columnconfigure(0, weight=1)
+
             self._build_header()
             self._build_timer_card()
             self._build_duration_controls()
             self._build_controls()
             self._build_footer()
 
-            # --- Bindings ---
             self._bind_events()
-
-            # --- Initial update ---
             self._update_break_labels()
             self._update_footer()
             self._update_state_badge()
@@ -502,23 +522,24 @@ else:
             style.configure("TCheckbutton", background=SLATE_BG, foreground=WHITE, font=("Segoe UI", 10))
 
         def _build_header(self):
-            header = ttk.Frame(self.root, style="TFrame")
-            header.pack(fill="x", pady=(18, 8))
+            header = ttk.Frame(self.root, style="TFrame", height=29)
+            header.grid(row=0, column=0, sticky="ew", pady=(18, 8))
+            header.grid_columnconfigure(0, weight=1)
+            header.grid_columnconfigure(1, weight=0)
+            header.grid_columnconfigure(2, weight=0)
             title = ttk.Label(header, text="⚡ DYNAMIC POMODORO", style="Header.TLabel")
-            title.pack(side="left", padx=(24, 10))
-            # Always on top
-            self.always_on_top_chk = ttk.Checkbutton(header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top, style="TCheckbutton")
-            self.always_on_top_chk.pack(side="right", padx=(10, 24))
-            # State badge
+            title.grid(row=0, column=0, sticky="w", padx=(24, 10))
             self.state_badge = ttk.Label(header, text="", style="StateBadge.TLabel")
-            self.state_badge.pack(side="right", padx=(0, 0), ipadx=8, ipady=2)
+            self.state_badge.grid(row=0, column=1, sticky="e", padx=(0, 0), ipadx=8, ipady=2)
+            self.always_on_top_chk = ttk.Checkbutton(header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top, style="TCheckbutton")
+            self.always_on_top_chk.grid(row=0, column=2, sticky="e", padx=(10, 24))
 
         def _build_timer_card(self):
-            card = ttk.Frame(self.root, style="Card.TFrame")
-            card.pack(fill="x", padx=32, pady=(0, 8))
-            # Canvas for progress bar
+            card = ttk.Frame(self.root, style="Card.TFrame", height=196)
+            card.grid(row=1, column=0, sticky="ew", padx=32, pady=(0, 8))
+            card.grid_columnconfigure(0, weight=1)
             self.timer_canvas = tk.Canvas(card, width=180, height=180, bg=CARD_BG, highlightthickness=0, bd=0)
-            self.timer_canvas.pack(pady=(16, 0))
+            self.timer_canvas.grid(row=0, column=0, pady=(16, 0), sticky="n")
             self.timer_label = ttk.Label(card, textvariable=self.timer_var, style="Timer.TLabel", anchor="center", background=CARD_BG)
             self.timer_label.place(in_=self.timer_canvas, relx=0.5, rely=0.5, anchor="center")
             self._timer_card = card
@@ -537,22 +558,20 @@ else:
             else:
                 color = NEON_CYAN if str(self.engine.state) == "FOCUS" else EMERALD
                 percent = min(1.0, max(0.0, self.engine.remaining_seconds / total if total else 0))
-            # Draw background circle
             self.timer_canvas.create_oval(10, 10, 170, 170, outline=DARK_GRAY, width=14)
-            # Draw arc
             if percent > 0:
                 self.timer_canvas.create_arc(10, 10, 170, 170, start=90, extent=-360*percent, style="arc", outline=color, width=14)
             if str(self.engine.state) == "OVERTIME":
                 self.timer_canvas.create_oval(10, 10, 170, 170, outline=AMBER, width=14)
 
         def _build_duration_controls(self):
-            frame = ttk.Labelframe(self.root, text="Focus Duration", style="Card.TLabelframe")
-            frame.pack(fill="x", padx=32, pady=(0, 8), ipadx=8, ipady=4)
+            frame = ttk.Labelframe(self.root, text="Focus Duration", style="Card.TLabelframe", height=110)
+            frame.grid(row=2, column=0, sticky="ew", padx=32, pady=(0, 8), ipadx=8, ipady=4)
+            frame.columnconfigure(0, weight=0)
             frame.columnconfigure(1, weight=1)
-            # Minus button
+            frame.columnconfigure(2, weight=0)
             self.minus_btn = tk.Button(frame, text="-", width=3, font=("Segoe UI", 14, "bold"), bg=DARK_GRAY, fg=WHITE, bd=0, relief="flat", highlightthickness=0, activebackground=GRAY, activeforeground=WHITE, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()-1))
-            self.minus_btn.grid(row=0, column=0, padx=(12, 4), pady=(8, 4))
-            # Custom dark slider
+            self.minus_btn.grid(row=0, column=0, padx=(12, 4), pady=(8, 4), sticky="ew")
             self.slider = tk.Scale(
                 frame, from_=1, to=120, orient="horizontal",
                 variable=self.focus_minutes_var, command=self._on_focus_slider,
@@ -561,18 +580,16 @@ else:
                 showvalue=False, length=460, width=14
             )
             self.slider.grid(row=0, column=1, sticky="ew", padx=(4, 4), pady=(8, 4))
-            # Plus button
             self.plus_btn = tk.Button(frame, text="+", width=3, font=("Segoe UI", 14, "bold"), bg=DARK_GRAY, fg=WHITE, bd=0, relief="flat", highlightthickness=0, activebackground=GRAY, activeforeground=WHITE, command=lambda: self._set_focus_duration(self.focus_minutes_var.get()+1))
-            self.plus_btn.grid(row=0, column=2, padx=(4, 12), pady=(8, 4))
-            # Short/long break preview
+            self.plus_btn.grid(row=0, column=2, padx=(4, 12), pady=(8, 4), sticky="ew")
             self.short_break_label = ttk.Label(frame, text="", style="BreakPreview.TLabel")
             self.short_break_label.grid(row=1, column=0, sticky="w", padx=(12, 4), pady=(0, 8), columnspan=2)
             self.long_break_label = ttk.Label(frame, text="", style="BreakPreview.TLabel")
             self.long_break_label.grid(row=1, column=2, sticky="e", padx=(4, 12), pady=(0, 8))
 
         def _build_controls(self):
-            frame = ttk.Frame(self.root, style="TFrame")
-            frame.pack(fill="x", padx=32, pady=(0, 8))
+            frame = ttk.Frame(self.root, style="TFrame", height=136)
+            frame.grid(row=3, column=0, sticky="ew", padx=32, pady=(0, 8))
             for i in range(6):
                 frame.columnconfigure(i, weight=1, uniform="ctrl")
             # Row 0: Start, Pause, Reset
@@ -582,22 +599,22 @@ else:
             self.pause_btn.grid(row=0, column=2, columnspan=2, sticky="ew", padx=8, pady=(8, 6), ipadx=14, ipady=4)
             self.reset_btn = ttk.Button(frame, text="↺ Reset", command=self._on_reset)
             self.reset_btn.grid(row=0, column=4, columnspan=2, sticky="ew", padx=8, pady=(8, 6), ipadx=14, ipady=4)
-            # Row 1: Overtime, Complete
             self.overtime_btn = ttk.Button(frame, text="+5m Flow Overtime", command=self._on_overtime, style="Amber.TButton")
             self.overtime_btn.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=(6, 10), ipadx=16, ipady=4)
             self.complete_btn = ttk.Button(frame, text="⏭ Complete Focus -> Break", command=self._on_complete, style="Emerald.TButton")
             self.complete_btn.grid(row=1, column=3, columnspan=3, sticky="ew", padx=8, pady=(6, 10), ipadx=16, ipady=4)
 
         def _build_footer(self):
-            frame = ttk.Frame(self.root, style="TFrame")
-            frame.pack(fill="x", side="bottom", padx=16, pady=(12, 8))
+            frame = ttk.Frame(self.root, style="TFrame", height=21)
+            frame.grid(row=4, column=0, sticky="ew", padx=16, pady=(12, 8))
+            frame.columnconfigure(0, weight=1)
             self.footer_label = ttk.Label(
                 frame,
                 text="",
                 style="Footer.TLabel",
                 anchor="w"
             )
-            self.footer_label.pack(side="left", padx=(8, 0))
+            self.footer_label.grid(row=0, column=0, sticky="w", padx=(8, 0))
 
         def _bind_events(self):
             self.focus_minutes_var.trace_add("write", self._on_focus_var_changed)
@@ -643,7 +660,6 @@ else:
             color = STATE_COLORS.get(state, WHITE)
             label = STATE_LABELS.get(state, state)
             self.state_badge.config(text=label, background=color, foreground=SLATE_BG if color != WHITE else CARD_BG)
-            # Timer color
             if state == "FOCUS":
                 self.timer_label.config(foreground=NEON_CYAN)
             elif state == "OVERTIME":
