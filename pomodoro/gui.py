@@ -46,6 +46,7 @@ STATE_LABELS = {
     "PAUSED": "PAUSED",
 }
 
+
 def format_time(secs, show_plus=False):
     sign = ""
     if show_plus and secs > 0:
@@ -53,6 +54,7 @@ def format_time(secs, show_plus=False):
     mins = abs(secs) // 60
     s = abs(secs) % 60
     return f"{sign}{mins:02}:{s:02}"
+
 
 class _DummySessionStorage:
     def __init__(self, path="session_stats.json"):
@@ -86,6 +88,7 @@ def _get_session_storage():
     except ImportError:
         return _DummySessionStorage
 
+
 # --- Modern CustomTkinter GUI ---
 if CUSTOMTKINTER_AVAILABLE:
     ctk.set_appearance_mode("dark")
@@ -97,7 +100,7 @@ if CUSTOMTKINTER_AVAILABLE:
             self.root.title("⚡ DYNAMIC POMODORO")
             # MANDATORY: geometry and minsize per remediation rules
             self.root.geometry("780x620")
-            self.root.minsize(760, 560)
+            self.root.minsize(740, 580)
             self.root.resizable(True, True)
             self.root.configure(bg=SLATE_BG)
             self.self_test = self_test
@@ -460,7 +463,7 @@ else:
             self.root.configure(bg=SLATE_BG)
             # MANDATORY: geometry and minsize per remediation rules
             self.root.geometry("780x620")
-            self.root.minsize(760, 560)
+            self.root.minsize(740, 580)
             self.root.resizable(True, True)
             self.self_test = self_test
 
