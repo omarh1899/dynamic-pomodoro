@@ -25,16 +25,20 @@ class SessionStorage:
                 "streak": 0
             }
 
-    def _save(self):
-        with open(self.path, "w") as f:
-            json.dump(self._data, f)
+    def load(self):
+        return dict(self._data)
 
-    def record_session(self, focus_minutes, overtime_minutes):
+    def save(self, stats=None):
+        data_to_save = self._data if stats is None else stats
+        with open(self.path, "w") as f:
+            json.dump(data_to_save, f)
+
+    def record_session(self, focus_minutes, overtime_minutes=0.0):
         self._data["completed_sessions"] += 1
         self._data["total_focus_minutes"] += float(focus_minutes)
         self._data["total_overtime_minutes"] += float(overtime_minutes)
         self._data["streak"] += 1
-        self._save()
+        self.save()
         return dict(self._data)
 
     def reset_stats(self):
@@ -44,7 +48,7 @@ class SessionStorage:
             "total_overtime_minutes": 0.0,
             "streak": 0
         }
-        self._save()
+        self.save()
         return dict(self._data)
 
     def get_stats(self):
