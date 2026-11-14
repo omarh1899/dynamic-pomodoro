@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk
 from tkinter import StringVar, IntVar, BooleanVar
 from pomodoro.engine import PomodoroEngine, TimerState, recalculate_breaks
-from pomodoro.storage import SessionStorage
 
 import sys
 import threading
@@ -43,6 +42,38 @@ def format_time(secs, show_plus=False):
     s = abs(secs) % 60
     return f"{sign}{mins:02}:{s:02}"
 
+class _DummySessionStorage:
+    def __init__(self, path="session_stats.json"):
+        self._stats = {
+            "completed_sessions": 0,
+            "total_focus_minutes": 0.0,
+            "total_overtime_minutes": 0.0,
+            "streak": 0,
+        }
+    def load(self):
+        return dict(self._stats)
+    def record_session(self, focus_minutes, overtime_minutes):
+        self._stats["completed_sessions"] += 1
+        self._stats["total_focus_minutes"] += focus_minutes
+        self._stats["total_overtime_minutes"] += overtime_minutes
+        self._stats["streak"] += 1
+        return dict(self._stats)
+    def reset_stats(self):
+        self._stats = {
+            "completed_sessions": 0,
+            "total_focus_minutes": 0.0,
+            "total_overtime_minutes": 0.0,
+            "streak": 0,
+        }
+        return dict(self._stats)
+
+def _get_session_storage():
+    try:
+        from pomodoro.storage import SessionStorage
+        return SessionStorage
+    except ImportError:
+        return _DummySessionStorage
+
 class PomodoroGUI:
     def __init__(self, root, self_test=False):
         self.root = root
@@ -55,7 +86,7 @@ class PomodoroGUI:
 
         # --- Engine & Storage ---
         self.engine = PomodoroEngine()
-        self.storage = SessionStorage()
+        self.storage = _get_session_storage()()
 
         # --- State Vars ---
         self.state_var = StringVar(value=self.engine.state)
