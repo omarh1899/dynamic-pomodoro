@@ -1,44 +1,51 @@
 import json
-from pathlib import Path
+import os
 
 class SessionStorage:
-    def __init__(self, path: str | Path = "session_stats.json"):
-        self.path = Path(path)
-        self._default = {
+    def __init__(self, path="stats.json"):
+        self.path = path
+        self._data = self._load()
+
+    def _load(self):
+        if not os.path.exists(self.path):
+            return {
+                "completed_sessions": 0,
+                "total_focus_minutes": 0.0,
+                "total_overtime_minutes": 0.0,
+                "streak": 0
+            }
+        try:
+            with open(self.path, "r") as f:
+                return json.load(f)
+        except Exception:
+            return {
+                "completed_sessions": 0,
+                "total_focus_minutes": 0.0,
+                "total_overtime_minutes": 0.0,
+                "streak": 0
+            }
+
+    def _save(self):
+        with open(self.path, "w") as f:
+            json.dump(self._data, f)
+
+    def record_session(self, focus_minutes, overtime_minutes):
+        self._data["completed_sessions"] += 1
+        self._data["total_focus_minutes"] += float(focus_minutes)
+        self._data["total_overtime_minutes"] += float(overtime_minutes)
+        self._data["streak"] += 1
+        self._save()
+        return dict(self._data)
+
+    def reset_stats(self):
+        self._data = {
             "completed_sessions": 0,
             "total_focus_minutes": 0.0,
             "total_overtime_minutes": 0.0,
             "streak": 0
         }
+        self._save()
+        return dict(self._data)
 
-    def load(self) -> dict:
-        if not self.path.exists():
-            return self._default.copy()
-        try:
-            with self.path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-            # Ensure all keys exist
-            for k, v in self._default.items():
-                if k not in data:
-                    data[k] = v
-            return data
-        except Exception:
-            return self._default.copy()
-
-    def record_session(self, focus_minutes: float, overtime_minutes: float) -> dict:
-        data = self.load()
-        data["completed_sessions"] += 1
-        data["total_focus_minutes"] += float(focus_minutes)
-        data["total_overtime_minutes"] += float(overtime_minutes)
-        data["streak"] += 1
-        self._save(data)
-        return data
-
-    def reset_stats(self) -> dict:
-        data = self._default.copy()
-        self._save(data)
-        return data
-
-    def _save(self, data: dict):
-        with self.path.open("w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+    def get_stats(self):
+        return dict(self._data)
