@@ -147,6 +147,9 @@ class PomodoroEngine:
                 excess = seconds - self.remaining_seconds
                 if self.remaining_seconds > 0:
                     self.remaining_seconds = 0
+                else:
+                    excess = seconds
+                self.remaining_seconds = 0
                 self.state = TimerState.OVERTIME
                 self.overtime_seconds += excess
         elif self.state == TimerState.OVERTIME:
