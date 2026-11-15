@@ -34,8 +34,6 @@ STATE_LABELS = {
     "SHORT_BREAK": "SHORT BREAK",
     "LONG_BREAK": "LONG BREAK",
     "PAUSED": "PAUSED",
-    "SHORT BREAK": "SHORT BREAK",
-    "LONG BREAK": "LONG BREAK",
 }
 
 ctk.set_appearance_mode("dark")
@@ -85,8 +83,8 @@ class PomodoroGUI:
         header.grid_columnconfigure(1, weight=0)
 
         # --- MAIN CARD ---
-        card = ctk.CTkFrame(self.root, fg_color=SLATE_LIGHT, corner_radius=18)
-        card.place(relx=0.5, rely=0.19, anchor="n", width=350, height=270)
+        card = ctk.CTkFrame(self.root, fg_color=SLATE_LIGHT, corner_radius=18, width=350, height=270)
+        card.place(relx=0.5, rely=0.19, anchor="n")
         self.card = card
 
         # Timer Canvas
@@ -100,8 +98,8 @@ class PomodoroGUI:
         self.timer_label.place(relx=0.5, rely=0.5, anchor="center")
 
         # --- FOCUS DURATION SLIDER ---
-        slider_frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        slider_frame.place(relx=0.5, rely=0.62, anchor="n", width=400, height=70)
+        slider_frame = ctk.CTkFrame(self.root, fg_color="transparent", width=440, height=75)
+        slider_frame.place(relx=0.5, rely=0.57, anchor="n")
         slider_label = ctk.CTkLabel(slider_frame, text="Focus Duration (minutes)", font=("Segoe UI", 12, "bold"), text_color=GRAY)
         slider_label.pack(anchor="w", padx=8, pady=(2, 0))
         self.focus_slider = ctk.CTkSlider(
@@ -117,7 +115,6 @@ class PomodoroGUI:
             height=18,
         )
         self.focus_slider.set(self.engine.focus_seconds // 60)
-        self.focus_slider.pack(fill="x", padx=8, pady=(2, 0))
         self.focus_value_label = ctk.CTkLabel(slider_frame, text=f"{int(self.engine.focus_seconds // 60)} min", font=("Segoe UI", 11), text_color=WHITE)
         self.focus_value_label.place(relx=1.0, rely=0.0, anchor="ne", x=-8, y=2)
 
@@ -125,15 +122,15 @@ class PomodoroGUI:
         self._build_controls()
 
         # --- STATS ---
-        stats_frame = ctk.CTkFrame(self.root, fg_color=SLATE_DARK, corner_radius=12)
-        stats_frame.place(relx=0.5, rely=0.93, anchor="s", width=700, height=70)
+        stats_frame = ctk.CTkFrame(self.root, fg_color=SLATE_DARK, corner_radius=12, width=680, height=56)
+        stats_frame.place(relx=0.5, rely=0.96, anchor="s")
         self.stats_label = ctk.CTkLabel(stats_frame, text="", font=("Segoe UI", 12), text_color=GRAY)
         self.stats_label.place(relx=0.5, rely=0.5, anchor="center")
         self._update_stats()
 
     def _build_controls(self):
-        frame = ctk.CTkFrame(self.root, fg_color="transparent")
-        frame.place(relx=0.5, rely=0.77, anchor="n", width=700, height=120)
+        frame = ctk.CTkFrame(self.root, fg_color="transparent", width=680, height=110)
+        frame.place(relx=0.5, rely=0.71, anchor="n")
         for i in range(6):
             frame.grid_columnconfigure(i, weight=1, uniform="ctrl")
         # Row 0: Start, Pause, Reset
@@ -274,7 +271,7 @@ class PomodoroGUI:
             self.timer_canvas.create_oval(24, 24, 156, 156, outline=PINK, width=3)
 
     def _update_stats(self):
-        stats = self.storage.load_stats()
+        stats = self.storage.load()
         txt = (
             f"Sessions: {stats.get('completed_sessions', 0)}   "
             f"Total Focus: {stats.get('total_focus_minutes', 0.0):.1f} min   "
