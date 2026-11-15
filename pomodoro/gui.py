@@ -1,28 +1,30 @@
-import tkinter as tk
-from tkinter import ttk
-from tkinter import StringVar, IntVar, BooleanVar
-from pomodoro.engine import PomodoroEngine, TimerState, recalculate_breaks
-
 import sys
 import threading
+import time
+import customtkinter as ctk
+from pomodoro.engine import PomodoroEngine, TimerState
+from pomodoro.storage import SessionStorage
 
-# --- Color Palette ---
-SLATE_BG = "#0f172a"
-CARD_BG = "#1e293b"
-NEON_CYAN = "#38bdf8"
-EMERALD = "#10b981"
-AMBER = "#f59e0b"
-WHITE = "#f8fafc"
-GRAY = "#64748b"
-DARK_GRAY = "#334155"
+# --- THEME COLORS ---
+SLATE_BG = "#181f2a"
+SLATE_DARK = "#141925"
+SLATE_LIGHT = "#232c3d"
+NEON_CYAN = "#00ffe7"
+EMERALD = "#2ee59d"
+PINK = "#ff3cac"
+YELLOW = "#ffe066"
+ORANGE = "#ffb347"
+RED = "#ff4e4e"
+WHITE = "#f3f3f3"
+GRAY = "#a0a0a0"
 
-STATE_COLORS = {
-    "IDLE": GRAY,
+BADGE_COLORS = {
+    "IDLE": SLATE_LIGHT,
     "FOCUS": NEON_CYAN,
-    "OVERTIME": AMBER,
-    "SHORT_BREAK": EMERALD,
-    "LONG_BREAK": EMERALD,
-    "PAUSED": WHITE,
+    "OVERTIME": PINK,
+    "SHORT BREAK": EMERALD,
+    "LONG BREAK": ORANGE,
+    "PAUSED": YELLOW,
 }
 
 STATE_LABELS = {
@@ -34,375 +36,255 @@ STATE_LABELS = {
     "PAUSED": "PAUSED",
 }
 
-def format_time(secs, show_plus=False):
-    sign = ""
-    if show_plus and secs > 0:
-        sign = "+"
-    mins = abs(secs) // 60
-    s = abs(secs) % 60
-    return f"{sign}{mins:02}:{s:02}"
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("dark-blue")
 
-class _DummySessionStorage:
-    def __init__(self, path="session_stats.json"):
-        self._stats = {
-            "completed_sessions": 0,
-            "total_focus_minutes": 0.0,
-            "total_overtime_minutes": 0.0,
-            "streak": 0,
-        }
-    def load(self):
-        return dict(self._stats)
-    def record_session(self, focus_minutes, overtime_minutes):
-        self._stats["completed_sessions"] += 1
-        self._stats["total_focus_minutes"] += focus_minutes
-        self._stats["total_overtime_minutes"] += overtime_minutes
-        self._stats["streak"] += 1
-        return dict(self._stats)
-    def reset_stats(self):
-        self._stats = {
-            "completed_sessions": 0,
-            "total_focus_minutes": 0.0,
-            "total_overtime_minutes": 0.0,
-            "streak": 0,
-        }
-        return dict(self._stats)
-
-def _get_session_storage():
-    try:
-        from pomodoro.storage import SessionStorage
-        return SessionStorage
-    except ImportError:
-        return _DummySessionStorage
+def format_time(secs):
+    m, s = divmod(int(secs), 60)
+    return f"{m:02}:{s:02}"
 
 class PomodoroGUI:
     def __init__(self, root, self_test=False):
         self.root = root
-        self.root.title("⚡ DYNAMIC POMODORO // CLUSTER EDITION")
-        self.root.configure(bg=SLATE_BG)
-        self.root.minsize(480, 420)
-        self.root.geometry("540x480")
-        self.root.resizable(False, False)
         self.self_test = self_test
-
-        # --- Engine & Storage ---
         self.engine = PomodoroEngine()
-        self.storage = _get_session_storage()()
-
-        # --- State Vars ---
-        self.state_var = StringVar(value=str(self.engine.state))
-        self.timer_var = StringVar(value=format_time(self.engine.remaining_seconds))
-        self.focus_minutes_var = IntVar(value=int(round(self.engine.focus_seconds / 60)))
-        self.short_break_var = StringVar()
-        self.long_break_var = StringVar()
-        self.always_on_top_var = BooleanVar(value=False)
-
-        # Footer stats
-        self.completed_sessions_var = IntVar(value=0)
-        self.total_focus_var = StringVar(value="0")
-        self.total_overtime_var = StringVar(value="0")
-        self.streak_var = IntVar(value=0)
-
-        # --- Style ---
-        self._setup_styles()
-
-        # --- Layout ---
-        self._build_header()
-        self._build_timer_card()
-        self._build_duration_controls()
-        self._build_controls()
-        self._build_footer()
-
-        # --- Bindings ---
-        self._bind_events()
-
-        # --- Initial update ---
-        self._update_break_labels()
-        self._update_footer()
+        self.storage = SessionStorage()
+        self._timer_running = False
+        self._timer_thread = None
+        self._stop_event = threading.Event()
+        self._last_tick = time.time()
+        self._build_ui()
         self._update_state_badge()
-        self._update_timer_display()
-        self._schedule_tick()
+        self._update_timer_label()
+        self._draw_progress()
+        if self.self_test:
+            self.root.after(500, self._self_test_exit)
 
-    def _setup_styles(self):
-        style = ttk.Style(self.root)
-        style.theme_use("clam")
-        style.configure("TFrame", background=SLATE_BG)
-        style.configure("Card.TFrame", background=CARD_BG, relief="flat")
-        style.configure("Header.TLabel", background=SLATE_BG, foreground=WHITE, font=("Segoe UI", 16, "bold"))
-        style.configure("StateBadge.TLabel", background=CARD_BG, foreground=WHITE, font=("Segoe UI", 10, "bold"))
-        style.configure("Timer.TLabel", background=CARD_BG, foreground=NEON_CYAN, font=("Consolas", 48, "bold"))
-        style.configure("BreakPreview.TLabel", background=CARD_BG, foreground=EMERALD, font=("Segoe UI", 10))
-        style.configure("Footer.TLabel", background=SLATE_BG, foreground=GRAY, font=("Segoe UI", 10))
-        style.configure("TButton", font=("Segoe UI", 11, "bold"), padding=6)
-        style.map("TButton",
-            background=[("active", DARK_GRAY), ("!active", CARD_BG)],
-            foreground=[("active", NEON_CYAN), ("!active", WHITE)]
-        )
-        style.configure("Accent.TButton", background=NEON_CYAN, foreground=SLATE_BG)
-        style.map("Accent.TButton",
-            background=[("active", EMERALD), ("!active", NEON_CYAN)],
-            foreground=[("active", SLATE_BG), ("!active", SLATE_BG)]
-        )
-        style.configure("Amber.TButton", background=AMBER, foreground=SLATE_BG)
-        style.map("Amber.TButton",
-            background=[("active", "#fbbf24"), ("!active", AMBER)],
-            foreground=[("active", SLATE_BG), ("!active", SLATE_BG)]
-        )
-        style.configure("Emerald.TButton", background=EMERALD, foreground=SLATE_BG)
-        style.map("Emerald.TButton",
-            background=[("active", "#34d399"), ("!active", EMERALD)],
-            foreground=[("active", SLATE_BG), ("!active", SLATE_BG)]
-        )
-        style.configure("Card.TLabelframe", background=CARD_BG, foreground=WHITE)
-        style.configure("Card.TLabelframe.Label", background=CARD_BG, foreground=WHITE)
-        style.configure("TCheckbutton", background=SLATE_BG, foreground=WHITE, font=("Segoe UI", 10))
+    def _self_test_exit(self):
+        print("GUI_SELF_TEST_OK")
+        self.root.destroy()
 
-    def _build_header(self):
-        header = ttk.Frame(self.root, style="TFrame")
-        header.pack(fill="x", pady=(18, 8))
-        title = ttk.Label(header, text="⚡ DYNAMIC POMODORO // CLUSTER EDITION", style="Header.TLabel")
-        title.pack(side="left", padx=(24, 8))
-        self.state_badge = ttk.Label(header, text="", style="StateBadge.TLabel")
-        self.state_badge.pack(side="left", padx=(8, 0), ipadx=8, ipady=2)
-        # Always on top
-        self.always_on_top_chk = ttk.Checkbutton(header, text="Always on Top", variable=self.always_on_top_var, command=self._toggle_always_on_top, style="TCheckbutton")
-        self.always_on_top_chk.pack(side="right", padx=(0, 24))
+    def _build_ui(self):
+        self.root.title("⚡ DYNAMIC POMODORO")
+        self.root.geometry("780x620")
+        self.root.minsize(740, 580)
+        self.root.resizable(True, True)
+        self.root.configure(bg=SLATE_BG)
 
-    def _build_timer_card(self):
-        card = ttk.Frame(self.root, style="Card.TFrame")
-        card.pack(fill="x", padx=32, pady=(0, 8))
-        self.timer_label = ttk.Label(card, textvariable=self.timer_var, style="Timer.TLabel", anchor="center")
-        self.timer_label.pack(pady=(18, 10), fill="x")
-        # For focus/overtime/break color change
-        self._timer_card = card
+        # --- HEADER ---
+        header = ctk.CTkFrame(self.root, fg_color=SLATE_DARK, height=54)
+        header.pack(fill="x", side="top")
+        header.grid_propagate(False)
+        title = ctk.CTkLabel(header, text="⚡ DYNAMIC POMODORO", font=("Segoe UI", 14, "bold"), text_color=NEON_CYAN)
+        title.grid(row=0, column=0, padx=24, pady=14, sticky="w")
+        self.state_badge = ctk.CTkLabel(header, text="", font=("Segoe UI", 12, "bold"), fg_color=SLATE_LIGHT, text_color=WHITE, corner_radius=10, width=120, height=32)
+        self.state_badge.grid(row=0, column=1, padx=18, pady=10, sticky="e")
+        header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(1, weight=0)
 
-    def _build_duration_controls(self):
-        frame = ttk.Labelframe(self.root, text="Focus Duration", style="Card.TLabelframe")
-        frame.pack(fill="x", padx=32, pady=(0, 8), ipadx=8, ipady=4)
-        # Slider
-        slider = ttk.Scale(frame, from_=1, to=120, orient="horizontal", variable=self.focus_minutes_var, command=self._on_focus_slider)
-        slider.grid(row=0, column=0, sticky="ew", padx=(12, 4), pady=8)
-        frame.columnconfigure(0, weight=1)
-        # Spinbox
-        self.spinbox = tk.Spinbox(frame, from_=1, to=120, width=4, textvariable=self.focus_minutes_var, font=("Segoe UI", 11), command=self._on_focus_spinbox, bg=CARD_BG, fg=WHITE, insertbackground=WHITE, highlightbackground=CARD_BG, relief="flat", justify="center")
-        self.spinbox.grid(row=0, column=1, padx=(4, 12), pady=8)
-        # Short/long break preview
-        self.short_break_label = ttk.Label(frame, text="", style="BreakPreview.TLabel")
-        self.short_break_label.grid(row=1, column=0, sticky="w", padx=(12, 4), pady=(0, 8))
-        self.long_break_label = ttk.Label(frame, text="", style="BreakPreview.TLabel")
-        self.long_break_label.grid(row=1, column=1, sticky="e", padx=(4, 12), pady=(0, 8))
+        # --- MAIN CARD ---
+        card = ctk.CTkFrame(self.root, fg_color=SLATE_LIGHT, corner_radius=18, width=350, height=270)
+        card.place(relx=0.5, rely=0.19, anchor="n")
+        self.card = card
+
+        # Timer Canvas
+        self.timer_canvas = ctk.CTkCanvas(card, width=180, height=180, bg=SLATE_LIGHT, highlightthickness=0)
+        self.timer_canvas.grid(row=0, column=0, padx=0, pady=0, sticky="nsew")
+        card.grid_rowconfigure(0, weight=1)
+        card.grid_columnconfigure(0, weight=1)
+
+        # Timer Label (centered over canvas)
+        self.timer_label = ctk.CTkLabel(card, text="25:00", font=("Segoe UI", 38, "bold"), text_color=WHITE, fg_color="transparent")
+        self.timer_label.place(relx=0.5, rely=0.5, anchor="center")
+
+        # --- FOCUS DURATION SLIDER ---
+        slider_frame = ctk.CTkFrame(self.root, fg_color="transparent", width=440, height=75)
+        slider_frame.place(relx=0.5, rely=0.57, anchor="n")
+        slider_label = ctk.CTkLabel(slider_frame, text="Focus Duration (minutes)", font=("Segoe UI", 12, "bold"), text_color=GRAY)
+        slider_label.pack(anchor="w", padx=8, pady=(2, 0))
+        self.focus_slider = ctk.CTkSlider(
+            slider_frame,
+            from_=10,
+            to=120,
+            number_of_steps=110,
+            command=self._on_focus_slider,
+            fg_color=SLATE_BG,
+            progress_color=NEON_CYAN,
+            button_color=NEON_CYAN,
+            button_hover_color=EMERALD,
+            height=18,
+        )
+        self.focus_slider.set(self.engine.focus_seconds // 60)
+        self.focus_value_label = ctk.CTkLabel(slider_frame, text=f"{int(self.engine.focus_seconds // 60)} min", font=("Segoe UI", 11), text_color=WHITE)
+        self.focus_value_label.place(relx=1.0, rely=0.0, anchor="ne", x=-8, y=2)
+
+        # --- CONTROLS ---
+        self._build_controls()
+
+        # --- STATS ---
+        stats_frame = ctk.CTkFrame(self.root, fg_color=SLATE_DARK, corner_radius=12, width=680, height=56)
+        stats_frame.place(relx=0.5, rely=0.96, anchor="s")
+        self.stats_label = ctk.CTkLabel(stats_frame, text="", font=("Segoe UI", 12), text_color=GRAY)
+        self.stats_label.place(relx=0.5, rely=0.5, anchor="center")
+        self._update_stats()
 
     def _build_controls(self):
-        frame = ttk.Frame(self.root, style="TFrame")
-        frame.pack(fill="x", padx=32, pady=(0, 8))
-        # Start
-        self.start_btn = ttk.Button(frame, text="▶ Start", command=self._on_start, style="Accent.TButton")
-        self.start_btn.grid(row=0, column=0, padx=4, pady=10, sticky="ew")
-        # Pause
-        self.pause_btn = ttk.Button(frame, text="⏸ Pause", command=self._on_pause)
-        self.pause_btn.grid(row=0, column=1, padx=4, pady=10, sticky="ew")
-        # Reset
-        self.reset_btn = ttk.Button(frame, text="↺ Reset", command=self._on_reset)
-        self.reset_btn.grid(row=0, column=2, padx=4, pady=10, sticky="ew")
-        # Overtime
-        self.overtime_btn = ttk.Button(frame, text="+5m Flow Overtime", command=self._on_overtime, style="Amber.TButton")
-        self.overtime_btn.grid(row=0, column=3, padx=4, pady=10, sticky="ew")
-        # Complete
-        self.complete_btn = ttk.Button(frame, text="⏭ Complete Focus -> Break", command=self._on_complete, style="Emerald.TButton")
-        self.complete_btn.grid(row=0, column=4, padx=4, pady=10, sticky="ew")
-        frame.columnconfigure((0, 1, 2, 3, 4), weight=1)
-
-    def _build_footer(self):
-        frame = ttk.Frame(self.root, style="TFrame")
-        frame.pack(fill="x", side="bottom", padx=16, pady=(12, 8))
-        self.footer_label = ttk.Label(
-            frame,
-            text="",
-            style="Footer.TLabel",
-            anchor="w"
-        )
-        self.footer_label.pack(side="left", padx=(8, 0))
-
-    def _bind_events(self):
-        self.focus_minutes_var.trace_add("write", self._on_focus_var_changed)
-        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-
-    def _toggle_always_on_top(self):
-        try:
-            self.root.attributes("-topmost", self.always_on_top_var.get())
-        except Exception:
-            pass
+        frame = ctk.CTkFrame(self.root, fg_color="transparent", width=680, height=110)
+        frame.place(relx=0.5, rely=0.71, anchor="n")
+        for i in range(6):
+            frame.grid_columnconfigure(i, weight=1, uniform="ctrl")
+        # Row 0: Start, Pause, Reset
+        self.start_btn = ctk.CTkButton(frame, text="▶ Start", font=("Segoe UI", 13, "bold"), fg_color=NEON_CYAN, text_color=SLATE_BG, command=self._on_start)
+        self.start_btn.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(8, 6))
+        self.pause_btn = ctk.CTkButton(frame, text="⏸ Pause", font=("Segoe UI", 13, "bold"), fg_color=YELLOW, text_color=SLATE_BG, command=self._on_pause)
+        self.pause_btn.grid(row=0, column=2, columnspan=2, sticky="ew", padx=8, pady=(8, 6))
+        self.reset_btn = ctk.CTkButton(frame, text="↺ Reset", font=("Segoe UI", 13, "bold"), fg_color=SLATE_LIGHT, text_color=WHITE, command=self._on_reset)
+        self.reset_btn.grid(row=0, column=4, columnspan=2, sticky="ew", padx=8, pady=(8, 6))
+        # Row 1: +5m Overtime, Complete Focus
+        self.overtime_btn = ctk.CTkButton(frame, text="+5m Flow Overtime", font=("Segoe UI", 13, "bold"), fg_color=PINK, text_color=WHITE, command=self._on_overtime)
+        self.overtime_btn.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=(6, 10))
+        self.complete_btn = ctk.CTkButton(frame, text="⏭ Complete Focus -> Break", font=("Segoe UI", 13, "bold"), fg_color=EMERALD, text_color=SLATE_BG, command=self._on_complete)
+        self.complete_btn.grid(row=1, column=3, columnspan=3, sticky="ew", padx=8, pady=(6, 10))
 
     def _on_focus_slider(self, val):
-        # Called by slider movement
-        try:
-            minutes = int(float(val))
-        except Exception:
-            minutes = self.focus_minutes_var.get()
-        self.focus_minutes_var.set(minutes)
-        self._set_focus_duration(minutes)
-
-    def _on_focus_spinbox(self):
-        try:
-            minutes = int(self.spinbox.get())
-        except Exception:
-            minutes = self.focus_minutes_var.get()
-        self.focus_minutes_var.set(minutes)
-        self._set_focus_duration(minutes)
-
-    def _on_focus_var_changed(self, *_):
-        minutes = self.focus_minutes_var.get()
-        self._set_focus_duration(minutes)
-
-    def _set_focus_duration(self, minutes):
-        # Clamp
-        if minutes < 1:
-            minutes = 1
-        elif minutes > 120:
-            minutes = 120
-        self.focus_minutes_var.set(minutes)
-        breaks = self.engine.set_focus_duration(minutes)
-        self._update_break_labels()
-        self._update_timer_display()
-
-    def _update_break_labels(self):
-        short_secs = self.engine.short_break_seconds
-        long_secs = self.engine.long_break_seconds
-        self.short_break_label.config(text=f"Short Break: {format_time(short_secs)}")
-        self.long_break_label.config(text=f"Long Break: {format_time(long_secs)}")
-
-    def _update_state_badge(self):
-        state = str(self.engine.state)
-        color = STATE_COLORS.get(state, WHITE)
-        label = STATE_LABELS.get(state, state)
-        self.state_badge.config(text=label, background=color, foreground=SLATE_BG if color != WHITE else CARD_BG)
-        # Timer color
-        if state == "FOCUS":
-            self.timer_label.config(foreground=NEON_CYAN)
-        elif state == "OVERTIME":
-            self.timer_label.config(foreground=AMBER)
-        elif state in ("SHORT_BREAK", "LONG_BREAK"):
-            self.timer_label.config(foreground=EMERALD)
-        elif state == "PAUSED":
-            self.timer_label.config(foreground=WHITE)
-        else:
-            self.timer_label.config(foreground=GRAY)
-
-    def _update_timer_display(self):
-        state = str(self.engine.state)
-        if state == "OVERTIME":
-            self.timer_var.set(format_time(self.engine.overtime_seconds, show_plus=True))
-        else:
-            self.timer_var.set(format_time(self.engine.remaining_seconds))
-        self._update_state_badge()
-
-    def _update_footer(self):
-        stats = self.storage.load()
-        self.completed_sessions_var.set(stats.get("completed_sessions", 0))
-        self.total_focus_var.set(str(int(round(stats.get("total_focus_minutes", 0)))))
-        self.total_overtime_var.set(str(int(round(stats.get("total_overtime_minutes", 0)))))
-        self.streak_var.set(stats.get("streak", 0))
-        self.footer_label.config(
-            text=f"Sessions: {self.completed_sessions_var.get()}   "
-                 f"Focus: {self.total_focus_var.get()}m   "
-                 f"Overtime: {self.total_overtime_var.get()}m   "
-                 f"Streak: {self.streak_var.get()}"
-        )
+        val = int(float(val))
+        self.focus_value_label.configure(text=f"{val} min")
+        self.engine.set_focus_duration(val)
+        self._update_timer_label()
+        self._draw_progress()
+        self._update_stats()
 
     def _on_start(self):
         self.engine.start()
         self._update_state_badge()
-        self._update_timer_display()
+        self._start_timer()
 
     def _on_pause(self):
         self.engine.pause()
         self._update_state_badge()
-        self._update_timer_display()
+        self._stop_timer()
 
     def _on_reset(self):
         self.engine.reset()
         self._update_state_badge()
-        self._update_timer_display()
+        self._update_timer_label()
+        self._draw_progress()
+        self._stop_timer()
 
     def _on_overtime(self):
         try:
-            self.engine.add_overtime(5.0)
+            self.engine.add_overtime(5)
         except Exception:
             pass
         self._update_state_badge()
-        self._update_timer_display()
+        self._update_timer_label()
+        self._draw_progress()
 
     def _on_complete(self):
-        prev_state = str(self.engine.state)
-        rem = self.engine.complete_focus()
+        self.engine.complete_focus()
         self._update_state_badge()
-        self._update_timer_display()
-        # Only record session if coming from FOCUS or OVERTIME
-        if prev_state in ("FOCUS", "OVERTIME"):
-            focus_mins = self.engine.focus_seconds / 60
-            overtime_mins = self.engine.overtime_seconds / 60
-            self.storage.record_session(focus_mins, overtime_mins)
-            self._update_footer()
+        self._update_timer_label()
+        self._draw_progress()
+        self._update_stats()
 
-    def _on_close(self):
-        self.root.destroy()
+    def _start_timer(self):
+        if not self._timer_running:
+            self._timer_running = True
+            self._stop_event.clear()
+            self._last_tick = time.time()
+            self._timer_thread = threading.Thread(target=self._timer_loop, daemon=True)
+            self._timer_thread.start()
 
-    def _schedule_tick(self):
-        # Called every 1s
-        if not self.self_test:
-            self._tick()
-            self.root.after(1000, self._schedule_tick)
+    def _stop_timer(self):
+        self._timer_running = False
+        self._stop_event.set()
 
-    def _tick(self):
-        state = str(self.engine.state)
-        if state in ("FOCUS", "OVERTIME", "SHORT_BREAK", "LONG_BREAK"):
-            try:
-                prev_rem = self.engine.remaining_seconds
-                prev_state = state
-                new_state = self.engine.tick(1)
-                # The engine.tick() return value may be an enum; always convert to str
-                new_state_str = str(new_state)
-                self._update_timer_display()
-                if prev_state in ("FOCUS", "OVERTIME") and new_state_str in ("SHORT_BREAK", "LONG_BREAK"):
-                    # Completed a session, record stats
-                    focus_mins = self.engine.focus_seconds / 60
-                    overtime_mins = self.engine.overtime_seconds / 60
-                    self.storage.record_session(focus_mins, overtime_mins)
-                    self._update_footer()
-                elif prev_state in ("SHORT_BREAK", "LONG_BREAK") and new_state_str == "IDLE":
-                    self._update_footer()
-            except Exception:
-                pass
+    def _timer_loop(self):
+        while self._timer_running and not self._stop_event.is_set():
+            now = time.time()
+            elapsed = now - self._last_tick
+            self._last_tick = now
+            if self.engine.state in ("FOCUS", "OVERTIME", "SHORT_BREAK", "LONG_BREAK"):
+                try:
+                    self.engine.tick(int(elapsed))
+                except Exception:
+                    pass
+                self._update_timer_label()
+                self._draw_progress()
+                self._update_state_badge()
+                if self.engine.state == "IDLE":
+                    self._stop_timer()
+                    self._update_stats()
+            time.sleep(1)
+        self._timer_running = False
 
-    # --- Self-test logic ---
-    def _self_test(self):
-        # Test dynamic break recalculation for 50m
-        breaks = self.engine.set_focus_duration(50)
-        assert breaks["short_break_seconds"] == 600, f"short_break_seconds={breaks['short_break_seconds']}"
-        assert breaks["long_break_seconds"] == 1800, f"long_break_seconds={breaks['long_break_seconds']}"
-        print("GUI_SELF_TEST_OK")
-        self.root.after(100, self.root.destroy)
+    def _update_state_badge(self):
+        raw_state = getattr(self.engine.state, "value", str(self.engine.state))
+        state = raw_state.replace("TimerState.", "").replace("_", " ").upper()
+        # Map to pretty label
+        pretty = STATE_LABELS.get(state, state)
+        color = BADGE_COLORS.get(pretty, SLATE_LIGHT)
+        self.state_badge.configure(text=pretty, fg_color=color, text_color=SLATE_BG if pretty in ("FOCUS", "SHORT BREAK", "LONG BREAK") else WHITE)
 
-def run_gui(self_test: bool = False) -> int:
-    # If headless, skip GUI and only test engine binding
-    try:
-        root = tk.Tk()
-    except Exception as e:
-        if self_test:
-            # Headless: test engine binding only
-            engine = PomodoroEngine()
-            breaks = engine.set_focus_duration(50)
-            assert breaks["short_break_seconds"] == 600
-            assert breaks["long_break_seconds"] == 1800
-            print("GUI_SELF_TEST_OK")
-            return 0
+    def _update_timer_label(self):
+        if self.engine.state == "OVERTIME":
+            t = self.engine.overtime_seconds
+            self.timer_label.configure(text=f"+{format_time(t)}", text_color=PINK)
+        elif self.engine.state in ("SHORT_BREAK", "LONG_BREAK", "SHORT BREAK", "LONG BREAK"):
+            t = self.engine.remaining_seconds
+            self.timer_label.configure(text=format_time(t), text_color=EMERALD if "LONG" not in self.engine.state else ORANGE)
         else:
-            raise
+            t = self.engine.remaining_seconds
+            self.timer_label.configure(text=format_time(t), text_color=WHITE)
 
+    def _draw_progress(self):
+        self.timer_canvas.delete("all")
+        # Draw background circle
+        self.timer_canvas.create_oval(10, 10, 170, 170, outline=SLATE_BG, width=14)
+        # Progress arc
+        if self.engine.state == "FOCUS":
+            total = self.engine.focus_seconds
+            remain = self.engine.remaining_seconds
+            percent = max(0.0, min(1.0, 1 - remain / total)) if total > 0 else 0
+            color = NEON_CYAN
+        elif self.engine.state == "OVERTIME":
+            percent = 1.0
+            color = PINK
+        elif self.engine.state in ("SHORT_BREAK", "SHORT BREAK"):
+            total = self.engine.short_break_seconds
+            remain = self.engine.remaining_seconds
+            percent = max(0.0, min(1.0, 1 - remain / total)) if total > 0 else 0
+            color = EMERALD
+        elif self.engine.state in ("LONG_BREAK", "LONG BREAK"):
+            total = self.engine.long_break_seconds
+            remain = self.engine.remaining_seconds
+            percent = max(0.0, min(1.0, 1 - remain / total)) if total > 0 else 0
+            color = ORANGE
+        else:
+            percent = 0.0
+            color = NEON_CYAN
+        # Draw arc (no capstyle!)
+        if percent > 0:
+            self.timer_canvas.create_arc(10, 10, 170, 170, start=90, extent=-360*percent, style="arc", outline=color, width=14)
+        # Overtime highlight
+        if self.engine.state == "OVERTIME":
+            self.timer_canvas.create_oval(24, 24, 156, 156, outline=PINK, width=3)
+
+    def _update_stats(self):
+        stats = self.storage.load()
+        txt = (
+            f"Sessions: {stats.get('completed_sessions', 0)}   "
+            f"Total Focus: {stats.get('total_focus_minutes', 0.0):.1f} min   "
+            f"Total Overtime: {stats.get('total_overtime_minutes', 0.0):.1f} min   "
+            f"Streak: {stats.get('streak', 0)}"
+        )
+        self.stats_label.configure(text=txt)
+
+def run_gui(self_test=False):
+    root = ctk.CTk()
     gui = PomodoroGUI(root, self_test=self_test)
-    if self_test:
-        gui._self_test()
+    try:
         root.mainloop()
-        return 0
-    else:
-        root.mainloop()
-        return 0
+    except KeyboardInterrupt:
+        pass
+    return 0
